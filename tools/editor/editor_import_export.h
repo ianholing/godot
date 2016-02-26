@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2015 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -32,6 +32,7 @@
 #include "resource.h"
 #include "scene/main/node.h"
 #include "scene/resources/texture.h"
+
 
 class EditorExportPlatform;
 class FileAccess;
@@ -86,6 +87,8 @@ protected:
 	Vector<uint8_t> get_exported_file_default(String& p_fname) const;
 	virtual Vector<uint8_t> get_exported_file(String& p_fname) const;
 	virtual Vector<StringName> get_dependencies(bool p_bundles) const;
+	virtual String find_export_template(String template_file_name, String *err=NULL) const;
+	virtual bool exists_export_template(String template_file_name, String *err=NULL) const;
 
 	struct TempData {
 
@@ -105,8 +108,17 @@ protected:
 
 	};
 
+	struct ZipData {
+
+		void* zip;
+		EditorProgress *ep;
+		int count;
+
+	};
+
 	void gen_export_flags(Vector<String> &r_flags, int p_flags);
 	static Error save_pack_file(void *p_userdata,const String& p_path, const Vector<uint8_t>& p_data,int p_file,int p_total);
+	static Error save_zip_file(void *p_userdata,const String& p_path, const Vector<uint8_t>& p_data,int p_file,int p_total);
 
 public:
 
@@ -124,14 +136,17 @@ public:
 	enum ExportFlags {
 		EXPORT_DUMB_CLIENT=1,
 		EXPORT_REMOTE_DEBUG=2,
-		EXPORT_VIEW_COLLISONS=4,
-		EXPORT_VIEW_NAVIGATION=8
+		EXPORT_REMOTE_DEBUG_LOCALHOST=4,
+		EXPORT_VIEW_COLLISONS=8,
+		EXPORT_VIEW_NAVIGATION=16,
 	};
 
 
 	Error export_project_files(EditorExportSaveFunction p_func, void* p_udata,bool p_make_bundles);
 
 	Error save_pack(FileAccess *p_where, bool p_make_bundles=false, int p_alignment = 1);
+	Error save_zip(const String& p_path, bool p_make_bundles=false);
+
 	virtual String get_name() const =0;
 	virtual ImageCompression get_image_compression() const=0;
 	virtual Ref<Texture> get_logo() const =0;
@@ -161,8 +176,7 @@ public:
 	enum ExportMode {
 		EXPORT_EXE,
 		EXPORT_PACK,
-		EXPORT_COPY,
-		EXPORT_BUNDLES
+		EXPORT_ZIP
 	};
 
 
@@ -184,6 +198,7 @@ private:
 	Ref<Texture> logo;
 
 	ExportMode export_mode;
+	bool bundle;
 protected:
 
 	bool _set(const StringName& p_name, const Variant& p_value);
@@ -245,6 +260,12 @@ public:
 		SCRIPT_ACTION_ENCRYPT
 	};
 
+	enum SampleAction {
+
+		SAMPLE_ACTION_NONE,
+		SAMPLE_ACTION_COMPRESS_RAM,
+	};
+
 protected:
 
 	struct ImageGroup {
@@ -264,7 +285,7 @@ protected:
 	Set<String> image_formats;
 
 	ExportFilter export_filter;
-	String export_custom_filter;
+	String export_custom_filter, export_custom_filter_exclude;
 	Map<StringName,FileAction> files;
 	Map<StringName,Ref<EditorExportPlatform> > exporters;
 	Map<StringName,ImageGroup> image_groups;
@@ -273,6 +294,12 @@ protected:
 
 	ScriptAction script_action;
 	String script_key;
+
+	SampleAction sample_action;
+	int sample_action_max_hz;
+	bool sample_action_trim;
+
+	bool convert_text_scenes;
 
 	static EditorImportExport* singleton;
 
@@ -305,7 +332,9 @@ public:
 	ExportFilter get_export_filter() const;
 
 	void set_export_custom_filter(const String& p_custom_filter);
+	void set_export_custom_filter_exclude(const String& p_custom_filter);
 	String get_export_custom_filter() const;
+	String get_export_custom_filter_exclude() const;
 
 	void set_export_image_action(ImageAction p_action);
 	ImageAction get_export_image_action() const;
@@ -342,6 +371,18 @@ public:
 
 	void script_set_encryption_key(const String& p_key);
 	String script_get_encryption_key() const;
+
+	void sample_set_action(SampleAction p_action);
+	SampleAction sample_get_action() const;
+
+	void sample_set_max_hz(int p_hz);
+	int sample_get_max_hz() const;
+
+	void sample_set_trim(bool p_trim);
+	bool sample_get_trim() const;
+
+	void set_convert_text_scenes(bool p_convert);
+	bool get_convert_text_scenes() const;
 
 	void load_config();
 	void save_config();
